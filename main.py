@@ -1,5 +1,6 @@
 import sys
 import time
+import threading
 import pygame
 import chess
 import constants
@@ -346,6 +347,14 @@ def draw_color_choice(screen):
     return white_rect, black_rect, back_rect
 
 
+def _bot_search_worker(engine, board, max_time, result_out):
+    try:
+        move = engine.find_move(board, max_time=max_time)
+        result_out.append(move)
+    except Exception:
+        result_out.append(None)
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode(
@@ -369,7 +378,9 @@ def main():
     bot_ready_time = 0
     bot_delay = 2.0
     bot_pending_move = None
-    bot_need_compute = False
+    bot_search_thread = None
+    bot_search_running = False
+    bot_search_result_container = None
 
     while running:
         dt = clock.tick(constants.FPS)
@@ -381,6 +392,9 @@ def main():
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 if state == PLAYING:
+                    engine._abort = True
+                    if bot_search_thread and bot_search_thread.is_alive():
+                        bot_search_thread.join(timeout=0.5)
                     state = MAIN_MENU
                 elif state == MODE_SELECT:
                     state = MAIN_MENU
@@ -532,6 +546,9 @@ def main():
                         board_view.flip()
                         continue
                     if event.key == pygame.K_n:
+                        engine._abort = True
+                        if bot_search_thread and bot_search_thread.is_alive():
+                            bot_search_thread.join(timeout=0.5)
                         state = MAIN_MENU
                         scroll_offset = 0
                         promotion_buttons = None
@@ -615,8 +632,25 @@ def main():
                 bot_move_pending = False
                 bot_pending_move = None
 
-            if bot_move_pending and bot_pending_move is None and not bot_need_compute:
-                bot_need_compute = True
+            if bot_move_pending and bot_pending_move is None and not bot_search_running:
+                board_copy = game.board.copy()
+                max_time = 0.8 + engine.depth * 0.5
+                bot_search_result_container = []
+                bot_search_thread = threading.Thread(
+                    target=_bot_search_worker,
+                    args=(engine, board_copy, max_time, bot_search_result_container),
+                    daemon=True,
+                )
+                bot_search_thread.start()
+                bot_search_running = True
+
+            if bot_search_running and bot_search_thread and not bot_search_thread.is_alive():
+                bot_search_running = False
+                bot_pending_move = bot_search_result_container[0] if bot_search_result_container else None
+                if bot_pending_move is None:
+                    bot_move_pending = False
+                else:
+                    bot_ready_time = time.time() + bot_delay
 
         # ── Render FIRST (player's move shows instantly) ──
         screen.fill(constants.BG_COLOR)
@@ -663,7 +697,8 @@ def main():
 
             if bot_move_pending:
                 font = pygame.font.SysFont("Segoe UI", 18, bold=True)
-                label = font.render("VECTOR is thinking...", True, (0, 0, 0))
+                dots = "." * (int(time.time() * 3) % 4)
+                label = font.render(f"VECTOR is thinking{dots}", True, (0, 0, 0))
                 lr = label.get_rect(
                     center=(
                         constants.WINDOW_WIDTH - constants.PANEL_WIDTH // 2,
@@ -718,16 +753,6 @@ def main():
                 screen.blit(pgn_label, pgn_label.get_rect(center=pgn_btn_rect.center))
 
         pygame.display.flip()
-
-        # ── Heavy compute AFTER render (never blocks player's move display) ──
-        if state == PLAYING and bot_need_compute:
-            max_time = 0.8 + engine.depth * 0.5
-            bot_pending_move = engine.find_move(game.board, max_time=max_time)
-            bot_need_compute = False
-            if bot_pending_move is None:
-                bot_move_pending = False
-            else:
-                bot_ready_time = time.time() + bot_delay
 
     pygame.quit()
     sys.exit()
