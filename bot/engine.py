@@ -1,7 +1,7 @@
 import chess
 import random
 import time
-from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES
+from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES, is_endgame
 from bot.ordering import order_moves
 from bot.book import OpeningBook
 
@@ -108,13 +108,29 @@ class Engine:
                 return self._quiesce(board, alpha, beta)
             return evaluate(board)
 
+        in_check = board.is_check()
+
+        # Null-move pruning (Mark 2+ only; skip in check, endgame, or shallow depth)
+        if self.version >= 1 and depth >= 3 and not in_check and not is_endgame(board):
+            board.push(chess.Move.null())
+            score = -self._minimax(board, depth - 2, -beta, -beta + 1)
+            board.pop()
+            if score >= beta:
+                return beta
+
         moves = list(board.legal_moves) if self.version == 0 else order_moves(board, list(board.legal_moves))
 
-        for move in moves:
+        for i, move in enumerate(moves):
             if self._abort:
                 break
             board.push(move)
-            score = -self._minimax(board, depth - 1, -beta, -alpha)
+            # PVS: full window on first move, zero window on the rest
+            if i == 0:
+                score = -self._minimax(board, depth - 1, -beta, -alpha)
+            else:
+                score = -self._minimax(board, depth - 1, -alpha - 1, -alpha)
+                if score > alpha and score < beta:
+                    score = -self._minimax(board, depth - 1, -beta, -alpha)
             board.pop()
 
             if score >= beta:
