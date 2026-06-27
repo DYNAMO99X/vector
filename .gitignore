@@ -7,3 +7,7 @@ __pycache__/
 build/
 dist/
 *.spec
+v2.md
+
+books/*.bin
+!books/komodo.bin

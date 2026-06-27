@@ -2,6 +2,12 @@ import chess
 from bot.evaluator import PIECE_VALUES
 
 
+def see(board, square, side):
+    """Wrapper to avoid circular import — delegates to evaluator.see."""
+    from bot.evaluator import see as _see
+    return _see(board, square, side)
+
+
 class History:
     def __init__(self):
         self.table = [[0] * 64 for _ in range(64)]
@@ -54,11 +60,14 @@ def mvv_lva(board, move):
     return PIECE_VALUES[victim.piece_type] * 10 - PIECE_VALUES[attacker.piece_type]
 
 
-def score_move(board, move, history=None, killers=None, ply=0):
+def score_move(board, move, history=None, killers=None, ply=0, see_fn=None):
     if board.is_en_passant(move):
         return PIECE_VALUES[chess.PAWN] * 10 + 1000
     victim = board.piece_at(move.to_square)
     if victim is not None:
+        if see_fn:
+            see_score = see_fn(board, move.to_square, board.turn)
+            return see_score + 1000
         attacker = board.piece_at(move.from_square)
         if attacker is None:
             return 0
@@ -73,14 +82,14 @@ def score_move(board, move, history=None, killers=None, ply=0):
     return bonus
 
 
-def order_moves(board, moves, best_move=None, history=None, killers=None, ply=0):
+def order_moves(board, moves, best_move=None, history=None, killers=None, ply=0, see_fn=None):
     scored = []
     for move in moves:
         score = 0
         if best_move and move == best_move:
             score = 100000
         else:
-            score = score_move(board, move, history, killers, ply)
+            score = score_move(board, move, history, killers, ply, see_fn)
         scored.append((score, move))
     scored.sort(key=lambda x: -x[0])
     return [m for _, m in scored]

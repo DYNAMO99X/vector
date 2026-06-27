@@ -3,13 +3,13 @@ import chess.polyglot
 import random
 import os
 
-
-BOOK_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uho-pohl.bin")
+BOOKS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "books")
+DEFAULT_BOOK = os.path.join(BOOKS_DIR, "komodo.bin")
 
 
 class OpeningBook:
-    def __init__(self, path=BOOK_FILE):
-        self.path = path
+    def __init__(self, path=None):
+        self.path = path or DEFAULT_BOOK
 
     def get_move(self, board):
         try:

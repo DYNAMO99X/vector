@@ -96,6 +96,63 @@ PST = {
 }
 
 
+PIECE_ORDER_SEE = [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING]
+
+
+def see(board, square, side):
+    """
+    Static Exchange Evaluation.
+    Returns the net centipawn gain for `side` capturing on `square`.
+    0 means the capture doesn't win material.
+    """
+    target = board.piece_at(square)
+    if target is None:
+        return 0
+
+    from copy import deepcopy
+    b = deepcopy(board)
+
+    gains = [PIECE_VALUES[target.piece_type]]
+    b.remove_piece_at(square)
+    current_side = not side
+
+    while True:
+        attackers = b.attackers(current_side, square)
+        if not attackers:
+            break
+
+        least_sq = None
+        for pt in PIECE_ORDER_SEE:
+            for sq in attackers:
+                p = b.piece_at(sq)
+                if p and p.piece_type == pt:
+                    least_sq = sq
+                    break
+            if least_sq:
+                break
+
+        if least_sq is None:
+            break
+
+        attacker = b.piece_at(least_sq)
+        captured = b.piece_at(square)
+        b.remove_piece_at(least_sq)
+        if captured:
+            b.remove_piece_at(square)
+        if attacker:
+            b.set_piece_at(square, attacker)
+
+        gains.append(PIECE_VALUES[attacker.piece_type] if captured else 0)
+        current_side = not current_side
+
+    score = 0
+    for i in range(len(gains) - 1, -1, -1):
+        score = gains[i] - score
+        if score < 0:
+            score = 0
+    return score
+
+
 def is_endgame(board):
     queens = len(board.pieces(chess.QUEEN, chess.WHITE)) + len(board.pieces(chess.QUEEN, chess.BLACK))
     total_pieces = len(board.piece_map())

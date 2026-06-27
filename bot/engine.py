@@ -1,24 +1,27 @@
 import chess
 import random
 import time
-from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES, is_endgame
+from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES, is_endgame, see
 from bot.ordering import order_moves, History, KillerMoves
 from bot.book import OpeningBook
 from bot.transposition import TranspositionTable, EXACT, LOWER, UPPER
 
 
 class Engine:
-    def __init__(self, depth=3, version=0, book_enabled=True):
+    def __init__(self, depth=3, version=0, book_enabled=True, book_path=None):
         self.depth = depth
         self.version = version
         self.book_enabled = book_enabled
-        self._book = OpeningBook()
+        self._book = OpeningBook(book_path)
         self.tt = TranspositionTable()
         self.history = History()
         self.killers = KillerMoves()
         self.searching = False
         self.best_move = None
         self.nodes_searched = 0
+
+    def update_book_path(self, book_path):
+        self._book = OpeningBook(book_path)
 
     def find_move(self, board, max_time=None):
         if self.book_enabled:
@@ -50,7 +53,8 @@ class Engine:
 
         tt_entry = self.tt.get(board)
         tt_move = tt_entry.best_move if tt_entry else None
-        moves = order_moves(board, list(board.legal_moves), tt_move or previous_best, self.history, self.killers, ply=0)
+        see_fn = see if self.version >= 4 else None
+        moves = order_moves(board, list(board.legal_moves), tt_move or previous_best, self.history, self.killers, ply=0, see_fn=see_fn)
 
         alpha = -float("inf")
         beta = float("inf")
@@ -104,6 +108,10 @@ class Engine:
         for move in board.legal_moves:
             if not in_check and not board.is_capture(move):
                 continue
+            # SEE pruning (Mark 5): skip losing captures
+            if self.version >= 4 and not in_check and not board.is_en_passant(move):
+                if see(board, move.to_square, board.turn) < 0:
+                    continue
             victim = board.piece_at(move.to_square)
             if victim and stand_pat + PIECE_VALUES[victim.piece_type] + 200 < alpha:
                 continue
@@ -159,19 +167,44 @@ class Engine:
             if score >= beta:
                 return beta
 
+        # Razoring (Mark 5): prune shallow nodes when eval can't reach alpha
+        if self.version >= 4 and depth <= 2 and not in_check and alpha != -float("inf"):
+            razor_margin = 300 if depth == 1 else 200
+            razor_eval = eval_fn(board)
+            if razor_eval + razor_margin < alpha:
+                return razor_eval
+
+        # IID (Mark 5): reduced-depth search to seed TT move when none exists
+        if self.version >= 4 and tt_move is None and depth >= 3:
+            iid_depth = max(1, depth // 2)
+            self._minimax(board, iid_depth, alpha, beta, ply)
+            iid_tt = self.tt.get(board)
+            if iid_tt and iid_tt.best_move:
+                tt_move = iid_tt.best_move
+
+        see_fn = see if self.version >= 4 else None
         if self.version == 0:
             moves = list(board.legal_moves)
         else:
-            moves = order_moves(board, list(board.legal_moves), tt_move, self.history, self.killers, ply)
+            moves = order_moves(board, list(board.legal_moves), tt_move, self.history, self.killers, ply, see_fn)
 
         best_move = None
         for i, move in enumerate(moves):
             if self._abort:
                 break
+
+            is_quiet = not board.is_capture(move) and not board.is_en_passant(move) and not board.is_castling(move) and not move.promotion is not None
+
+            # Futility pruning (Mark 5): skip quiet moves that can't reach alpha
+            if self.version >= 4 and depth <= 2 and is_quiet and not in_check and i >= 1:
+                if not board.gives_check(move):
+                    futility_margin = 200 if depth == 1 else 150
+                    if eval_fn(board) + futility_margin <= alpha:
+                        continue
+
             board.push(move)
 
             extension = 1 if board.is_check() else 0
-            is_quiet = not board.is_capture(move) and not board.is_en_passant(move) and not board.is_castling(move) and not board.is_promotion(move)
 
             # LMR (Mark 2+)
             do_lmr = self.version >= 1 and depth >= 3 and i >= 3 and is_quiet and not in_check

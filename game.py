@@ -64,14 +64,14 @@ class Game:
             return False
         return True
 
-    def try_move(self, from_sq, to_sq):
+    def validate_move(self, from_sq, to_sq):
         legal = self.get_legal_moves_for_square(from_sq)
         if not legal:
-            return False
+            return None
 
         matching = [m for m in legal if m.to_square == to_sq]
         if not matching:
-            return False
+            return None
 
         promotion_moves = [m for m in matching if m.promotion]
         if promotion_moves:
@@ -80,21 +80,20 @@ class Game:
                 "from_sq": from_sq,
                 "to_sq": to_sq,
             }
-            return True
+            return None
 
-        self._execute_move(matching[0])
-        return True
+        return matching[0]
 
     def choose_promotion(self, piece_type):
         if not self.pending_promotion:
-            return
+            return None
 
         for move in self.pending_promotion["moves"]:
             if move.promotion == piece_type:
-                self._execute_move(move)
-                break
+                self.pending_promotion = None
+                return move
 
-        self.pending_promotion = None
+        return None
 
     def _execute_move(self, move):
         captured = self.board.piece_at(move.to_square)
