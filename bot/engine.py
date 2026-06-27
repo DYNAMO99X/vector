@@ -1,7 +1,7 @@
 import chess
 import random
 import time
-from bot.evaluator import evaluate
+from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES
 from bot.ordering import order_moves
 from bot.book import OpeningBook
 
@@ -58,6 +58,41 @@ class Engine:
 
         return best_move
 
+    def _quiesce(self, board, alpha, beta):
+        self.nodes_searched += 1
+
+        if self._abort:
+            return evaluate(board)
+
+        if self._deadline and time.time() >= self._deadline:
+            self._abort = True
+            return evaluate(board)
+
+        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
+        stand_pat = eval_fn(board)
+
+        if stand_pat >= beta:
+            return beta
+        if stand_pat > alpha:
+            alpha = stand_pat
+
+        in_check = board.is_check()
+        for move in board.legal_moves:
+            if not in_check and not board.is_capture(move):
+                continue
+            victim = board.piece_at(move.to_square)
+            if victim and stand_pat + PIECE_VALUES[victim.piece_type] + 200 < alpha:
+                continue
+            board.push(move)
+            score = -self._quiesce(board, -beta, -alpha)
+            board.pop()
+            if score >= beta:
+                return beta
+            if score > alpha:
+                alpha = score
+
+        return alpha
+
     def _minimax(self, board, depth, alpha, beta):
         self.nodes_searched += 1
 
@@ -69,6 +104,8 @@ class Engine:
             return evaluate(board)
 
         if depth == 0 or board.is_game_over():
+            if self.version >= 1:
+                return self._quiesce(board, alpha, beta)
             return evaluate(board)
 
         moves = list(board.legal_moves) if self.version == 0 else order_moves(board, list(board.legal_moves))
