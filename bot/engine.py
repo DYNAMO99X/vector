@@ -79,7 +79,7 @@ class Engine:
 
         in_check = board.is_check()
         for move in board.legal_moves:
-            if not in_check and not board.is_capture(move) and not board.gives_check(move):
+            if not in_check and not board.is_capture(move):
                 continue
             victim = board.piece_at(move.to_square)
             if victim and stand_pat + PIECE_VALUES[victim.piece_type] + 200 < alpha:
