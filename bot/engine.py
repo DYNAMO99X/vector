@@ -22,11 +22,11 @@ class Engine:
             if book_move is not None:
                 return book_move
 
-        if self.version == 0:
-            return self._minimax_root(board, self.depth)
-
         self._deadline = time.time() + max_time if max_time else None
         self._abort = False
+
+        if self.version == 0:
+            return self._minimax_root(board, self.depth)
 
         best = None
         for d in range(1, self.depth + 1):
@@ -52,6 +52,9 @@ class Engine:
             if score > best_score:
                 best_score = score
                 best_move = move
+
+        if best_move is None and moves:
+            best_move = moves[0]
 
         return best_move
 
