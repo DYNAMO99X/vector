@@ -31,9 +31,10 @@ PLAYING = 4
 MODE_SELECT = 5
 BOT_VERSION_SELECTOR = 6
 BOT_DEPTH_SELECTOR = 7
+SELF_PLAY_CONFIG = 8
 
 
-def draw_panel(screen, game, board_view, scroll_offset):
+def draw_panel(screen, game, board_view, scroll_offset, self_play=False):
     panel_rect = pygame.Rect(constants.PANEL_X, constants.MARGIN_TOP,
                              constants.PANEL_WIDTH, constants.BOARD_SIZE)
     pygame.draw.rect(screen, constants.PANEL_BG, panel_rect)
@@ -64,8 +65,12 @@ def draw_panel(screen, game, board_view, scroll_offset):
     clock_y = top + 32
     w_time = game.player_time if game.player_color == chess.WHITE else game.opponent_time
     b_time = game.opponent_time if game.player_color == chess.WHITE else game.player_time
-    w_label = "You" if game.player_color == chess.WHITE else "Opp"
-    b_label = "Opp" if game.player_color == chess.WHITE else "You"
+    if self_play:
+        w_label = "White"
+        b_label = "Black"
+    else:
+        w_label = "You" if game.player_color == chess.WHITE else "Opp"
+        b_label = "Opp" if game.player_color == chess.WHITE else "You"
 
     w_min, w_sec = divmod(int(w_time), 60)
     b_min, b_sec = divmod(int(b_time), 60)
@@ -256,47 +261,59 @@ def draw_mode_select(screen, settings):
     font_small = pygame.font.SysFont("Segoe UI", 14)
 
     title = font_big.render("Select Game Mode", True, (220, 220, 220))
-    tr = title.get_rect(center=(constants.WINDOW_WIDTH // 2, 140))
+    tr = title.get_rect(center=(constants.WINDOW_WIDTH // 2, 110))
     screen.blit(title, tr)
 
     button_w = 300
-    button_h = 80
+    button_h = 70
     btn_x = constants.WINDOW_WIDTH // 2 - button_w // 2
 
-    bot_rect = pygame.Rect(btn_x, 210, button_w, button_h)
+    bot_rect = pygame.Rect(btn_x, 170, button_w, button_h)
     pygame.draw.rect(screen, (40, 65, 55), bot_rect, border_radius=12)
     pygame.draw.rect(screen, (80, 160, 130), bot_rect, 2, border_radius=12)
 
     bot_title = font_mid.render(
         f"vs VECTOR {BOT_VERSIONS[settings.bot_version][0]}", True, (140, 230, 200)
     )
-    bt_rect = bot_title.get_rect(center=(bot_rect.centerx, bot_rect.centery - 12))
+    bt_rect = bot_title.get_rect(center=(bot_rect.centerx, bot_rect.centery - 10))
     screen.blit(bot_title, bt_rect)
 
     bot_sub = font_small.render("Play against the engine", True, (140, 190, 170))
     bs_rect = bot_sub.get_rect(center=(bot_rect.centerx, bot_rect.centery + 14))
     screen.blit(bot_sub, bs_rect)
 
-    player_rect = pygame.Rect(btn_x, 320, button_w, button_h)
+    self_play_rect = pygame.Rect(btn_x, 260, button_w, button_h)
+    pygame.draw.rect(screen, (45, 55, 65), self_play_rect, border_radius=12)
+    pygame.draw.rect(screen, (100, 160, 200), self_play_rect, 2, border_radius=12)
+
+    sp_title = font_mid.render("Self-Play", True, (160, 210, 240))
+    st_rect = sp_title.get_rect(center=(self_play_rect.centerx, self_play_rect.centery - 10))
+    screen.blit(sp_title, st_rect)
+
+    sp_sub = font_small.render("Watch VECTOR play itself", True, (150, 170, 190))
+    ss_rect = sp_sub.get_rect(center=(self_play_rect.centerx, self_play_rect.centery + 14))
+    screen.blit(sp_sub, ss_rect)
+
+    player_rect = pygame.Rect(btn_x, 350, button_w, button_h)
     pygame.draw.rect(screen, (55, 55, 55), player_rect, border_radius=12)
     pygame.draw.rect(screen, (100, 100, 100), player_rect, 2, border_radius=12)
 
     pl_title = font_mid.render("vs Player", True, (200, 200, 200))
-    pt_rect = pl_title.get_rect(center=(player_rect.centerx, player_rect.centery - 12))
+    pt_rect = pl_title.get_rect(center=(player_rect.centerx, player_rect.centery - 10))
     screen.blit(pl_title, pt_rect)
 
     pl_sub = font_small.render("Play against a friend locally", True, (150, 150, 150))
     ps_rect = pl_sub.get_rect(center=(player_rect.centerx, player_rect.centery + 14))
     screen.blit(pl_sub, ps_rect)
 
-    back_rect = pygame.Rect(constants.WINDOW_WIDTH // 2 - 50, 450, 100, 36)
+    back_rect = pygame.Rect(constants.WINDOW_WIDTH // 2 - 50, 460, 100, 36)
     pygame.draw.rect(screen, (65, 65, 65), back_rect, border_radius=6)
     pygame.draw.rect(screen, (100, 100, 100), back_rect, 1, border_radius=6)
     back_text = font_small.render("< Back", True, (180, 180, 180))
     bt_rect = back_text.get_rect(center=back_rect.center)
     screen.blit(back_text, bt_rect)
 
-    return bot_rect, player_rect, back_rect
+    return bot_rect, self_play_rect, player_rect, back_rect
 
 
 def draw_color_choice(screen):
@@ -347,6 +364,113 @@ def draw_color_choice(screen):
     return white_rect, black_rect, back_rect
 
 
+SELF_PLAY_DELAYS = [0.1, 0.5, 1.0, 2.0]
+
+
+def draw_self_play_config(screen, settings, white_ver, black_ver, delay):
+    screen.fill(constants.BG_COLOR)
+
+    font_big = pygame.font.SysFont("Segoe UI", 26, bold=True)
+    font_mid = pygame.font.SysFont("Segoe UI", 18, bold=True)
+    font_small = pygame.font.SysFont("Segoe UI", 14)
+    font_button = pygame.font.SysFont("Segoe UI", 15, bold=True)
+
+    title = font_big.render("Self-Play Setup", True, (220, 220, 220))
+    tr = title.get_rect(center=(constants.WINDOW_WIDTH // 2, 40))
+    screen.blit(title, tr)
+
+    sections = [
+        ("White Engine", 80, white_ver, 0),
+        ("Black Engine", 180, black_ver, 1),
+    ]
+
+    buttons = {"white": [], "black": [], "delay": [], "start": None, "back": None}
+    btn_w = 130
+    btn_h = 44
+    gap = 10
+    total_w = 4 * btn_w + 3 * gap
+    start_x = constants.WINDOW_WIDTH // 2 - total_w // 2
+
+    for label, y, current_ver, key in sections:
+        lbl = font_mid.render(label, True, (200, 200, 200))
+        screen.blit(lbl, (start_x, y))
+        row_btns = []
+        for vi, (vname, _) in enumerate(BOT_VERSIONS):
+            bx = start_x + vi * (btn_w + gap)
+            by = y + 28
+            rect = pygame.Rect(bx, by, btn_w, btn_h)
+            is_active = vi == current_ver
+            bg = (50, 70, 65) if is_active else (45, 45, 45)
+            border = (80, 160, 130) if is_active else (70, 70, 70)
+            pygame.draw.rect(screen, bg, rect, border_radius=8)
+            pygame.draw.rect(screen, border, rect, 2, border_radius=8)
+            color = (140, 230, 200) if is_active else (180, 180, 180)
+            txt = font_button.render(f"Mark {vi + 1}", True, color)
+            t_rect = txt.get_rect(center=rect.center)
+            screen.blit(txt, t_rect)
+            row_btns.append((rect, vi))
+        buttons["white" if key == 0 else "black"] = row_btns
+
+    delay_y = 280
+    delay_lbl = font_mid.render("Move Delay", True, (200, 200, 200))
+    screen.blit(delay_lbl, (start_x, delay_y))
+
+    delay_btns = []
+    for di, d in enumerate(SELF_PLAY_DELAYS):
+        bx = start_x + di * (btn_w + gap)
+        by = delay_y + 28
+        rect = pygame.Rect(bx, by, btn_w, btn_h)
+        is_active = abs(d - delay) < 0.01
+        bg = (50, 65, 50) if is_active else (45, 45, 45)
+        border = (80, 150, 80) if is_active else (70, 70, 70)
+        pygame.draw.rect(screen, bg, rect, border_radius=8)
+        pygame.draw.rect(screen, border, rect, 2, border_radius=8)
+        label = f"{d:.1f}s" if d >= 1.0 else f"{d:.1f}s"
+        color = (140, 220, 140) if is_active else (180, 180, 180)
+        txt = font_button.render(label, True, color)
+        t_rect = txt.get_rect(center=rect.center)
+        screen.blit(txt, t_rect)
+        delay_btns.append((rect, d))
+    buttons["delay"] = delay_btns
+
+    btn_y = constants.WINDOW_HEIGHT - 70
+
+    start_rect = pygame.Rect(constants.WINDOW_WIDTH // 2 - 110, btn_y, 100, 42)
+    pygame.draw.rect(screen, (50, 70, 65), start_rect, border_radius=8)
+    pygame.draw.rect(screen, (80, 160, 130), start_rect, 2, border_radius=8)
+    start_text = font_mid.render("Start", True, (140, 230, 200))
+    st_rect = start_text.get_rect(center=start_rect.center)
+    screen.blit(start_text, st_rect)
+    buttons["start"] = start_rect
+
+    back_rect = pygame.Rect(constants.WINDOW_WIDTH // 2 + 20, btn_y, 100, 42)
+    pygame.draw.rect(screen, (65, 65, 65), back_rect, border_radius=8)
+    pygame.draw.rect(screen, (100, 100, 100), back_rect, 2, border_radius=8)
+    back_text = font_mid.render("Back", True, (180, 180, 180))
+    btr = back_text.get_rect(center=back_rect.center)
+    screen.blit(back_text, btr)
+    buttons["back"] = back_rect
+
+    return buttons
+
+
+def handle_self_play_click(mx, my, buttons):
+    for rect, vi in buttons["white"]:
+        if rect.collidepoint(mx, my):
+            return "white_ver", vi
+    for rect, vi in buttons["black"]:
+        if rect.collidepoint(mx, my):
+            return "black_ver", vi
+    for rect, d in buttons["delay"]:
+        if rect.collidepoint(mx, my):
+            return "delay", d
+    if buttons["start"].collidepoint(mx, my):
+        return "start", None
+    if buttons["back"].collidepoint(mx, my):
+        return "back", None
+    return None, None
+
+
 def _bot_search_worker(engine, board, max_time, result_out):
     try:
         move = engine.find_move(board, max_time=max_time)
@@ -381,6 +505,12 @@ def main():
     bot_search_thread = None
     bot_search_running = False
     bot_search_result_container = None
+    self_play = False
+    engine_white = None
+    engine_black = None
+    self_play_white_ver = 3
+    self_play_black_ver = 2
+    self_play_delay = 0.5
 
     while running:
         dt = clock.tick(constants.FPS)
@@ -392,7 +522,11 @@ def main():
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 if state == PLAYING:
-                    engine._abort = True
+                    if self_play:
+                        if engine_white: engine_white._abort = True
+                        if engine_black: engine_black._abort = True
+                    else:
+                        engine._abort = True
                     if bot_search_thread and bot_search_thread.is_alive():
                         bot_search_thread.join(timeout=0.5)
                     state = MAIN_MENU
@@ -408,6 +542,8 @@ def main():
                     state = SETTINGS_LIST
                 elif state == BOT_DEPTH_SELECTOR:
                     state = SETTINGS_LIST
+                elif state == SELF_PLAY_CONFIG:
+                    state = MAIN_MENU
                 elif state == MAIN_MENU:
                     running = False
                 continue
@@ -425,14 +561,20 @@ def main():
             if state == MODE_SELECT:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
-                    bot_rect, player_rect, back_rect = draw_mode_select(screen, settings)
+                    bot_rect, self_play_rect, player_rect, back_rect = draw_mode_select(screen, settings)
                     if back_rect.collidepoint(mx, my):
                         state = MAIN_MENU
                     elif bot_rect.collidepoint(mx, my):
                         vs_bot = True
+                        self_play = False
                         state = COLOR_CHOICE
+                    elif self_play_rect.collidepoint(mx, my):
+                        vs_bot = False
+                        self_play = True
+                        state = SELF_PLAY_CONFIG
                     elif player_rect.collidepoint(mx, my):
                         vs_bot = False
+                        self_play = False
                         state = COLOR_CHOICE
                 continue
 
@@ -501,6 +643,38 @@ def main():
                             state = SETTINGS_LIST
                 continue
 
+            if state == SELF_PLAY_CONFIG:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = event.pos
+                    buttons = draw_self_play_config(screen, settings, self_play_white_ver, self_play_black_ver, self_play_delay)
+                    result, value = handle_self_play_click(mx, my, buttons)
+                    if result == "back":
+                        state = MAIN_MENU
+                    elif result == "start":
+                        if engine:
+                            engine._abort = True
+                        engine_white = Engine(depth=settings.bot_depth, version=self_play_white_ver, book_enabled=settings.book_enabled)
+                        engine_black = Engine(depth=settings.bot_depth, version=self_play_black_ver, book_enabled=settings.book_enabled)
+                        game.reset(
+                            player_color=chess.WHITE,
+                            time_minutes=settings.time_minutes,
+                            time_increment=settings.time_increment
+                        )
+                        board_view.flipped = False
+                        state = PLAYING
+                        scroll_offset = 0
+                        promotion_buttons = None
+                        game_over_pgn_copied = False
+                        bot_move_pending = True
+                        bot_pending_move = None
+                    elif result == "white_ver":
+                        self_play_white_ver = value
+                    elif result == "black_ver":
+                        self_play_black_ver = value
+                    elif result == "delay":
+                        self_play_delay = value
+                continue
+
             if state == COLOR_CHOICE:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
@@ -538,7 +712,7 @@ def main():
                 continue
 
             if state == PLAYING:
-                if bot_move_pending or (vs_bot and game.board.turn != game.player_color):
+                if bot_move_pending or (vs_bot and not self_play and game.board.turn != game.player_color):
                     continue
 
                 if event.type == pygame.KEYDOWN:
@@ -546,7 +720,11 @@ def main():
                         board_view.flip()
                         continue
                     if event.key == pygame.K_n:
-                        engine._abort = True
+                        if self_play:
+                            if engine_white: engine_white._abort = True
+                            if engine_black: engine_black._abort = True
+                        else:
+                            engine._abort = True
                         if bot_search_thread and bot_search_thread.is_alive():
                             bot_search_thread.join(timeout=0.5)
                         state = MAIN_MENU
@@ -631,14 +809,20 @@ def main():
                 game._execute_move(bot_pending_move)
                 bot_move_pending = False
                 bot_pending_move = None
+                if self_play and not game.is_game_over():
+                    bot_move_pending = True
+                    bot_pending_move = None
 
             if bot_move_pending and bot_pending_move is None and not bot_search_running:
                 board_copy = game.board.copy()
                 max_time = 0.8 + engine.depth * 0.5
+                active_engine = engine
+                if self_play:
+                    active_engine = engine_white if game.board.turn == chess.WHITE else engine_black
                 bot_search_result_container = []
                 bot_search_thread = threading.Thread(
                     target=_bot_search_worker,
-                    args=(engine, board_copy, max_time, bot_search_result_container),
+                    args=(active_engine, board_copy, max_time, bot_search_result_container),
                     daemon=True,
                 )
                 bot_search_thread.start()
@@ -650,7 +834,7 @@ def main():
                 if bot_pending_move is None:
                     bot_move_pending = False
                 else:
-                    bot_ready_time = time.time() + bot_delay
+                    bot_ready_time = time.time() + (self_play_delay if self_play else bot_delay)
 
         # ── Render FIRST (player's move shows instantly) ──
         screen.fill(constants.BG_COLOR)
@@ -669,6 +853,8 @@ def main():
             draw_bot_version_selector(screen, settings)
         elif state == BOT_DEPTH_SELECTOR:
             draw_bot_depth_selector(screen, settings)
+        elif state == SELF_PLAY_CONFIG:
+            draw_self_play_config(screen, settings, self_play_white_ver, self_play_black_ver, self_play_delay)
         elif state == PLAYING:
             if not (game.is_game_over() or game.resigned):
                 game_over_pgn_copied = False
@@ -691,14 +877,22 @@ def main():
                 check_square=check_square,
             )
 
-            resign_rect, scroll_offset = draw_panel(
-                screen, game, board_view, scroll_offset
-            )
+            if not self_play:
+                resign_rect, scroll_offset = draw_panel(
+                    screen, game, board_view, scroll_offset
+                )
+            else:
+                resign_rect = pygame.Rect(0, 0, 1, 1)
+                draw_panel(screen, game, board_view, scroll_offset, self_play=True)
 
             if bot_move_pending:
                 font = pygame.font.SysFont("Segoe UI", 18, bold=True)
                 dots = "." * (int(time.time() * 3) % 4)
-                label = font.render(f"VECTOR is thinking{dots}", True, (0, 0, 0))
+                if self_play:
+                    who = "White" if game.board.turn == chess.WHITE else "Black"
+                    label = font.render(f"{who} is thinking{dots}", True, (0, 0, 0))
+                else:
+                    label = font.render(f"VECTOR is thinking{dots}", True, (0, 0, 0))
                 lr = label.get_rect(
                     center=(
                         constants.WINDOW_WIDTH - constants.PANEL_WIDTH // 2,

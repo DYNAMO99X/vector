@@ -126,7 +126,16 @@ def evaluate(board):
         else:
             score -= value + positional
 
-    return score if board.turn == chess.WHITE else -score
+    score = score if board.turn == chess.WHITE else -score
+
+    if board.is_repetition(2):
+        contempt = 20
+        if score > 0:
+            score = max(0, score - contempt)
+        elif score < 0:
+            score = min(0, score + contempt)
+
+    return score
 
 
 def is_passed_pawn(board, square, color):
@@ -293,5 +302,12 @@ def evaluate_mark3(board):
 
     if not eg:
         score += (mobility(board, chess.WHITE) - mobility(board, chess.BLACK)) * 2
+
+    if board.is_repetition(2):
+        contempt = 20
+        if score > 0:
+            score = max(0, score - contempt)
+        elif score < 0:
+            score = min(0, score + contempt)
 
     return score if board.turn == chess.WHITE else -score
