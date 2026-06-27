@@ -234,6 +234,24 @@ def king_tropism(board, color):
     return total
 
 
+def hanging_piece_penalty(board, color):
+    penalty = 0
+    for sq in board.piece_map():
+        piece = board.piece_at(sq)
+        if piece.color != color:
+            continue
+        attackers = board.attackers(not color, sq)
+        if not attackers:
+            continue
+        defenders = board.attackers(color, sq)
+        if not defenders:
+            penalty += PIECE_VALUES[piece.piece_type] * 0.7
+        elif len(attackers) > len(defenders):
+            excess = len(attackers) - len(defenders)
+            penalty += PIECE_VALUES[piece.piece_type] * 0.3 * excess
+    return int(penalty)
+
+
 def evaluate_mark3(board):
     if board.is_checkmate():
         return -30000 if board.turn else 30000
@@ -260,6 +278,10 @@ def evaluate_mark3(board):
         if not eg:
             score += sign * king_safety(board, color)
             score += sign * king_tropism(board, color)
+
+    # Threat detection
+    score -= hanging_piece_penalty(board, chess.WHITE)
+    score += hanging_piece_penalty(board, chess.BLACK)
 
     if not eg:
         score += (mobility(board, chess.WHITE) - mobility(board, chess.BLACK)) * 2

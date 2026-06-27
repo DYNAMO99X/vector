@@ -61,14 +61,15 @@ class Engine:
     def _quiesce(self, board, alpha, beta):
         self.nodes_searched += 1
 
+        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
+
         if self._abort:
-            return evaluate(board)
+            return eval_fn(board)
 
         if self._deadline and time.time() >= self._deadline:
             self._abort = True
-            return evaluate(board)
+            return eval_fn(board)
 
-        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
         stand_pat = eval_fn(board)
 
         if stand_pat >= beta:
@@ -78,7 +79,7 @@ class Engine:
 
         in_check = board.is_check()
         for move in board.legal_moves:
-            if not in_check and not board.is_capture(move):
+            if not in_check and not board.is_capture(move) and not board.gives_check(move):
                 continue
             victim = board.piece_at(move.to_square)
             if victim and stand_pat + PIECE_VALUES[victim.piece_type] + 200 < alpha:
@@ -96,6 +97,8 @@ class Engine:
     def _minimax(self, board, depth, alpha, beta):
         self.nodes_searched += 1
 
+        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
+
         if self._abort:
             return evaluate(board)
 
@@ -103,10 +106,10 @@ class Engine:
             self._abort = True
             return evaluate(board)
 
-        if depth == 0 or board.is_game_over():
+        if depth <= 0 or board.is_game_over():
             if self.version >= 1:
                 return self._quiesce(board, alpha, beta)
-            return evaluate(board)
+            return eval_fn(board)
 
         in_check = board.is_check()
 
@@ -124,13 +127,15 @@ class Engine:
             if self._abort:
                 break
             board.push(move)
+            extension = 1 if board.is_check() else 0
+            new_depth = depth - 1 + extension
             # PVS: full window on first move, zero window on the rest
             if i == 0:
-                score = -self._minimax(board, depth - 1, -beta, -alpha)
+                score = -self._minimax(board, new_depth, -beta, -alpha)
             else:
-                score = -self._minimax(board, depth - 1, -alpha - 1, -alpha)
+                score = -self._minimax(board, new_depth, -alpha - 1, -alpha)
                 if score > alpha and score < beta:
-                    score = -self._minimax(board, depth - 1, -beta, -alpha)
+                    score = -self._minimax(board, new_depth, -beta, -alpha)
             board.pop()
 
             if score >= beta:
