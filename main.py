@@ -357,7 +357,7 @@ def main():
     board_view = Board()
     settings = GameSettings()
     game = Game(settings.time_minutes, settings.time_increment)
-    engine = Engine(depth=settings.bot_depth)
+    engine = Engine(depth=settings.bot_depth, version=settings.bot_version)
     running = True
     state = MAIN_MENU
     vs_bot = False
@@ -463,6 +463,8 @@ def main():
                     )
                     if result == "back":
                         state = SETTINGS_LIST
+                    else:
+                        engine.version = settings.bot_version
                 continue
 
             if state == BOT_DEPTH_SELECTOR:
