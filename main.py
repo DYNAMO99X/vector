@@ -521,7 +521,7 @@ def main():
                 continue
 
             if state == PLAYING:
-                if bot_move_pending:
+                if bot_move_pending or (vs_bot and game.board.turn != game.player_color):
                     continue
 
                 if event.type == pygame.KEYDOWN:
