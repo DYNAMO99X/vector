@@ -718,7 +718,7 @@ def main():
 
         # ── Heavy compute AFTER render (never blocks player's move display) ──
         if state == PLAYING and bot_need_compute:
-            bot_pending_move = engine.find_move(game.board)
+            bot_pending_move = engine.find_move(game.board, max_time=1.5)
             bot_need_compute = False
             bot_ready_time = time.time() + bot_delay
 

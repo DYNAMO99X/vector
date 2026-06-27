@@ -1,5 +1,6 @@
 import chess
 import random
+import time
 from bot.evaluator import evaluate
 from bot.ordering import order_moves
 
@@ -12,12 +13,16 @@ class Engine:
         self.best_move = None
         self.nodes_searched = 0
 
-    def find_move(self, board):
+    def find_move(self, board, max_time=None):
         if self.version == 0:
             return self._minimax_root(board, self.depth)
 
+        self._deadline = time.time() + max_time if max_time else None
+
         best = None
         for d in range(1, self.depth + 1):
+            if self._deadline and time.time() >= self._deadline:
+                break
             best = self._minimax_root(board, d, previous_best=best)
         return best
 
@@ -41,6 +46,9 @@ class Engine:
 
     def _minimax(self, board, depth, alpha, beta):
         self.nodes_searched += 1
+
+        if self._deadline and self.nodes_searched % 1024 == 0 and time.time() >= self._deadline:
+            return evaluate(board)
 
         if depth == 0 or board.is_game_over():
             return evaluate(board)
