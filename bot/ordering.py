@@ -19,6 +19,8 @@ def score_move(board, move):
         if attacker is None:
             return 0
         return PIECE_VALUES[victim.piece_type] * 10 - PIECE_VALUES[attacker.piece_type] + 1000
+    if board.is_castling(move):
+        return 800
     return 0
 
 

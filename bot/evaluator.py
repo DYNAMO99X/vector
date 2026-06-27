@@ -126,7 +126,7 @@ def evaluate(board):
         else:
             score -= value + positional
 
-    return score
+    return score if board.turn == chess.WHITE else -score
 
 
 def is_passed_pawn(board, square, color):
@@ -193,7 +193,15 @@ def king_safety(board, color):
                 p = board.piece_at(sq)
                 if p and p.piece_type == chess.PAWN and p.color == color:
                     shield += 1
-    return shield * 15
+
+    score = shield * 15
+
+    if king_sq in ({chess.G1, chess.C1} if color == chess.WHITE else {chess.G8, chess.C8}):
+        score += 40
+    elif chess.square_file(king_sq) == 4:
+        score -= 20
+
+    return score
 
 
 def rook_open_file_bonus(board, color):
@@ -286,4 +294,4 @@ def evaluate_mark3(board):
     if not eg:
         score += (mobility(board, chess.WHITE) - mobility(board, chess.BLACK)) * 2
 
-    return score
+    return score if board.turn == chess.WHITE else -score
