@@ -104,7 +104,7 @@ def is_endgame(board):
 
 def evaluate(board):
     if board.is_checkmate():
-        return -30000 if board.turn else 30000
+        return -30000
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
 
@@ -262,7 +262,7 @@ def hanging_piece_penalty(board, color):
 
 def evaluate_mark3(board):
     if board.is_checkmate():
-        return -30000 if board.turn else 30000
+        return -30000
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
 

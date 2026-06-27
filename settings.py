@@ -16,6 +16,7 @@ BOT_VERSIONS = [
     ("Mark 1", "Alpha-beta + material/PST"),
     ("Mark 2", "Move ordering + iterative deepening"),
     ("Mark 3", "Quiescence search + advanced evaluation"),
+    ("Mark 4", "Aspiration windows + LMR + history/killer"),
 ]
 
 DEPTH_PRESETS = [2, 3, 4, 5, 6, 8, 10]

@@ -2,7 +2,7 @@ import chess
 import random
 import time
 from bot.evaluator import evaluate, evaluate_mark3, PIECE_VALUES, is_endgame
-from bot.ordering import order_moves
+from bot.ordering import order_moves, History, KillerMoves
 from bot.book import OpeningBook
 from bot.transposition import TranspositionTable, EXACT, LOWER, UPPER
 
@@ -14,6 +14,8 @@ class Engine:
         self.book_enabled = book_enabled
         self._book = OpeningBook()
         self.tt = TranspositionTable()
+        self.history = History()
+        self.killers = KillerMoves()
         self.searching = False
         self.best_move = None
         self.nodes_searched = 0
@@ -27,31 +29,47 @@ class Engine:
         self._deadline = time.time() + max_time if max_time else None
         self._abort = False
         self.tt.clear()
+        self.history.age()
+        self.killers.clear()
 
         if self.version == 0:
-            return self._minimax_root(board, self.depth)
+            return self._minimax_root(board, self.depth)[0]
 
-        best = None
+        best_move = None
+        best_score = None
         for d in range(1, self.depth + 1):
             if self._abort:
                 break
-            best = self._minimax_root(board, d, previous_best=best)
-        return best
+            best_move, best_score = self._minimax_root(board, d, previous_best=best_move, prev_score=best_score)
+        return best_move
 
-    def _minimax_root(self, board, depth, previous_best=None):
+    def _minimax_root(self, board, depth, previous_best=None, prev_score=None):
         self.nodes_searched = 0
         best_score = -float("inf")
         best_move = None
 
         tt_entry = self.tt.get(board)
         tt_move = tt_entry.best_move if tt_entry else None
-        moves = order_moves(board, list(board.legal_moves), tt_move or previous_best)
+        moves = order_moves(board, list(board.legal_moves), tt_move or previous_best, self.history, self.killers, ply=0)
+
+        alpha = -float("inf")
+        beta = float("inf")
+        use_aspiration = prev_score is not None and depth >= 3 and self.version >= 1
+        if use_aspiration:
+            alpha = prev_score - 50
+            beta = prev_score + 50
 
         for move in moves:
             if self._abort:
                 break
             board.push(move)
-            score = -self._minimax(board, depth - 1, -float("inf"), float("inf"))
+            if use_aspiration:
+                score = -self._minimax(board, depth - 1, -beta, -alpha, ply=1)
+                if score <= alpha or score >= beta:
+                    use_aspiration = False
+                    score = -self._minimax(board, depth - 1, -float("inf"), float("inf"), ply=1)
+            else:
+                score = -self._minimax(board, depth - 1, -float("inf"), float("inf"), ply=1)
             board.pop()
 
             if score > best_score:
@@ -61,12 +79,12 @@ class Engine:
         if best_move is None and moves:
             best_move = moves[0]
 
-        return best_move
+        return best_move, best_score
 
     def _quiesce(self, board, alpha, beta):
         self.nodes_searched += 1
 
-        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
+        eval_fn = evaluate_mark3 if self.version >= 2 else evaluate
 
         if self._abort:
             return eval_fn(board)
@@ -99,10 +117,10 @@ class Engine:
 
         return alpha
 
-    def _minimax(self, board, depth, alpha, beta):
+    def _minimax(self, board, depth, alpha, beta, ply=0):
         self.nodes_searched += 1
 
-        eval_fn = evaluate_mark3 if self.version == 2 else evaluate
+        eval_fn = evaluate_mark3 if self.version >= 2 else evaluate
 
         if self._abort:
             return evaluate(board)
@@ -133,10 +151,10 @@ class Engine:
 
         in_check = board.is_check()
 
-        # Null-move pruning (Mark 2+ only; skip in check, endgame, or shallow depth)
-        if self.version >= 1 and depth >= 3 and not in_check and not is_endgame(board):
+        # Null-move pruning (Mark 2+ only; skip in check, endgame, shallow depth, or unbounded window)
+        if self.version >= 1 and depth >= 3 and not in_check and not is_endgame(board) and beta != float("inf"):
             board.push(chess.Move.null())
-            score = -self._minimax(board, depth - 2, -beta, -beta + 1)
+            score = -self._minimax(board, depth - 2, -beta, -beta + 1, ply + 1)
             board.pop()
             if score >= beta:
                 return beta
@@ -144,27 +162,47 @@ class Engine:
         if self.version == 0:
             moves = list(board.legal_moves)
         else:
-            moves = order_moves(board, list(board.legal_moves), tt_move)
+            moves = order_moves(board, list(board.legal_moves), tt_move, self.history, self.killers, ply)
 
         best_move = None
         for i, move in enumerate(moves):
             if self._abort:
                 break
             board.push(move)
+
             extension = 1 if board.is_check() else 0
-            new_depth = depth - 1 + extension
-            if i == 0:
-                score = -self._minimax(board, new_depth, -beta, -alpha)
+            is_quiet = not board.is_capture(move) and not board.is_en_passant(move) and not board.is_castling(move) and not board.is_promotion(move)
+
+            # LMR (Mark 2+)
+            do_lmr = self.version >= 1 and depth >= 3 and i >= 3 and is_quiet and not in_check
+            if do_lmr:
+                hist_val = self.history.get(move.from_square, move.to_square)
+                r = 1
+                if i >= 6:
+                    r = 2
+                if hist_val <= 0:
+                    r += 1
+                reduced = max(1, depth - 1 - r + extension)
+                score = -self._minimax(board, reduced, -alpha - 1, -alpha, ply + 1)
+                if score > alpha:
+                    score = -self._minimax(board, depth - 1 + extension, -beta, -alpha, ply + 1)
+            elif i == 0:
+                score = -self._minimax(board, depth - 1 + extension, -beta, -alpha, ply + 1)
             else:
-                score = -self._minimax(board, new_depth, -alpha - 1, -alpha)
+                # PVS
+                score = -self._minimax(board, depth - 1 + extension, -alpha - 1, -alpha, ply + 1)
                 if score > alpha and score < beta:
-                    score = -self._minimax(board, new_depth, -beta, -alpha)
+                    score = -self._minimax(board, depth - 1 + extension, -beta, -alpha, ply + 1)
+
             board.pop()
 
             if score > alpha:
                 alpha = score
                 best_move = move
             if score >= beta:
+                if is_quiet and best_move:
+                    self.history.update(move.from_square, move.to_square, depth)
+                    self.killers.store(ply, move)
                 break
 
         # TT store (Mark 2+ only)
