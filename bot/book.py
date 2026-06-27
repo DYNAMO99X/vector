@@ -4,7 +4,7 @@ import random
 import os
 
 
-BOOK_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "book.bin")
+BOOK_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uho-pohl.bin")
 
 
 class OpeningBook:
