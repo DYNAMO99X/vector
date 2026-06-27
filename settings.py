@@ -26,12 +26,14 @@ class GameSettings:
         self.time_increment = 0
         self.bot_version = 0
         self.bot_depth = 3
+        self.book_enabled = True
 
     def reset(self):
         self.time_minutes = 10
         self.time_increment = 0
         self.bot_version = 0
         self.bot_depth = 3
+        self.book_enabled = True
 
     def total_seconds(self):
         return self.time_minutes * 60
@@ -96,6 +98,7 @@ def draw_settings_list(screen, settings):
         ("Match Time", "Set game timer and increment", True),
         ("Bot Version", f"Currently: {BOT_VERSIONS[settings.bot_version][0]}", True),
         ("Bot Depth", f"Search depth: {settings.bot_depth}", True),
+        ("Opening Book", f"{'Enabled' if settings.book_enabled else 'Disabled'}", True),
         ("Board Theme", "Customize colors", False),
     ]
 

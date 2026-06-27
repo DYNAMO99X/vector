@@ -357,7 +357,7 @@ def main():
     board_view = Board()
     settings = GameSettings()
     game = Game(settings.time_minutes, settings.time_increment)
-    engine = Engine(depth=settings.bot_depth, version=settings.bot_version)
+    engine = Engine(depth=settings.bot_depth, version=settings.bot_version, book_enabled=settings.book_enabled)
     running = True
     state = MAIN_MENU
     vs_bot = False
@@ -436,6 +436,9 @@ def main():
                                 state = BOT_VERSION_SELECTOR
                             elif label == "Bot Depth":
                                 state = BOT_DEPTH_SELECTOR
+                            elif label == "Opening Book":
+                                settings.book_enabled = not settings.book_enabled
+                                engine.book_enabled = settings.book_enabled
                 continue
 
             if state == TIME_SELECTOR:

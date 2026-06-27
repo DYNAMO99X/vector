@@ -3,17 +3,25 @@ import random
 import time
 from bot.evaluator import evaluate
 from bot.ordering import order_moves
+from bot.book import OpeningBook
 
 
 class Engine:
-    def __init__(self, depth=3, version=0):
+    def __init__(self, depth=3, version=0, book_enabled=True):
         self.depth = depth
         self.version = version
+        self.book_enabled = book_enabled
+        self._book = OpeningBook()
         self.searching = False
         self.best_move = None
         self.nodes_searched = 0
 
     def find_move(self, board, max_time=None):
+        if self.book_enabled:
+            book_move = self._book.get_move(board)
+            if book_move is not None:
+                return book_move
+
         if self.version == 0:
             return self._minimax_root(board, self.depth)
 
