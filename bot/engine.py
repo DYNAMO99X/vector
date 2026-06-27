@@ -26,10 +26,11 @@ class Engine:
             return self._minimax_root(board, self.depth)
 
         self._deadline = time.time() + max_time if max_time else None
+        self._abort = False
 
         best = None
         for d in range(1, self.depth + 1):
-            if self._deadline and time.time() >= self._deadline:
+            if self._abort:
                 break
             best = self._minimax_root(board, d, previous_best=best)
         return best
@@ -42,6 +43,8 @@ class Engine:
         moves = order_moves(board, list(board.legal_moves), previous_best)
 
         for move in moves:
+            if self._abort:
+                break
             board.push(move)
             score = -self._minimax(board, depth - 1, -float("inf"), float("inf"))
             board.pop()
@@ -55,7 +58,11 @@ class Engine:
     def _minimax(self, board, depth, alpha, beta):
         self.nodes_searched += 1
 
-        if self._deadline and self.nodes_searched % 1024 == 0 and time.time() >= self._deadline:
+        if self._abort:
+            return evaluate(board)
+
+        if self._deadline and time.time() >= self._deadline:
+            self._abort = True
             return evaluate(board)
 
         if depth == 0 or board.is_game_over():
@@ -64,6 +71,8 @@ class Engine:
         moves = list(board.legal_moves) if self.version == 0 else order_moves(board, list(board.legal_moves))
 
         for move in moves:
+            if self._abort:
+                break
             board.push(move)
             score = -self._minimax(board, depth - 1, -beta, -alpha)
             board.pop()
